@@ -1,0 +1,363 @@
+// Prisma Schema for Moonlit Jewel Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String           @id @default(uuid())
+  email        String           @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         String           @default("CUSTOMER") // CUSTOMER, WHOLESALE_CUSTOMER, STAFF, ADMIN, SUPER_ADMIN
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  profile      CustomerProfile?
+  wholesale    WholesaleCustomer?
+  orders       RetailOrder[]
+  rentals      RentalBooking[]
+  wishlists    Wishlist[]
+}
+
+model CustomerProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address     String?
+  city        String?
+  state       String?
+  pincode     String?
+  preferences String?
+}
+
+model WholesaleCustomer {
+  id             String           @id @default(uuid())
+  userId         String           @unique
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName   String
+  ownerName      String
+  phone          String
+  email          String
+  gstNumber      String?
+  businessType   String           // RETAILER, BOUTIQUE, EXPORTER, DISTRIBUTOR
+  city           String
+  state          String
+  address        String
+  website        String?
+  expectedVolume String?
+  status         String           @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  orders         WholesaleOrder[]
+}
+
+model Category {
+  id          String        @id @default(uuid())
+  name        String
+  slug        String        @unique
+  description String?
+  image       String?
+  displayOrder Int          @default(0)
+  products    Product[]
+  subcategories Subcategory[]
+}
+
+model Subcategory {
+  id         String    @id @default(uuid())
+  categoryId String
+  category   Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String
+  slug       String    @unique
+  products   Product[]
+}
+
+model Collection {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  heroImage   String?
+  featured    Boolean   @default(false)
+  products    Product[]
+}
+
+model Product {
+  id              String               @id @default(uuid())
+  productCode     String               @unique
+  name            String
+  slug            String               @unique
+  categoryId      String
+  category        Category             @relation(fields: [categoryId], references: [id])
+  subcategoryId   String?
+  subcategory     Subcategory?         @relation(fields: [subcategoryId], references: [id])
+  collectionId    String?
+  collection      Collection?          @relation(fields: [collectionId], references: [id])
+  description     String
+  purity          String               // 22K Gold, 18K Diamond, Antique Polki, Kundan
+  weight          String               // e.g. 78.5g
+  stoneDetails    String?
+  dimensions      String?
+  retailPrice     Float
+  wholesalePrice  Float?               // Protected server-side
+  rentalPrice     Float?               // Daily/Event rental fee
+  securityDeposit Float?
+  moq             Int                  @default(1)
+  stockQuantity   Int                  @default(5)
+  isAvailable     Boolean              @default(true)
+  certification   String?              // BIS Hallmarked, IGI Certified
+  isFeatured      Boolean              @default(false)
+  isNew           Boolean              @default(false)
+  isBestSeller    Boolean              @default(false)
+  verticalTag     String               @default("ALL") // BRIDAL, RETAIL, WHOLESALE, RENTAL, ALL
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  images          ProductImage[]
+  inventory       Inventory?
+  retailItems     RetailOrderItem[]
+  wholesaleItems  WholesaleOrderItem[]
+  rentalItems     RentalBookingItem[]
+  wishlistItems   WishlistItem[]
+  enquiries       Enquiry[]
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  type      String   @default("FRONT") // FRONT, ANGLE_45, CLOSE_UP, WORN, DETAIL, LIFESTYLE, PACKAGING
+  isPrimary Boolean  @default(false)
+  sortOrder Int      @default(0)
+}
+
+model Inventory {
+  id                String                 @id @default(uuid())
+  productId         String                 @unique
+  product           Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  totalStock        Int                    @default(10)
+  reserved          Int                    @default(0)
+  available         Int                    @default(10)
+  lowStockThreshold Int                    @default(2)
+  transactions      InventoryTransaction[]
+}
+
+model InventoryTransaction {
+  id          String    @id @default(uuid())
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  type        String    // PURCHASE, SALE, RENTAL_RESERVATION, RENTAL_RETURN, ADJUSTMENT
+  quantity    Int
+  note        String?
+  createdAt   DateTime  @default(now())
+}
+
+model RetailOrder {
+  id              String            @id @default(uuid())
+  orderNumber     String            @unique
+  customerId      String
+  customer        User              @relation(fields: [customerId], references: [id])
+  totalAmount     Float
+  paymentStatus   String            @default("PENDING") // PENDING, PAID, FAILED, REFUNDED
+  orderStatus     String            @default("PENDING") // PENDING, CONFIRMED, PROCESSING, SHIPPED, COMPLETED, CANCELLED
+  shippingAddress String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  items           RetailOrderItem[]
+}
+
+model RetailOrderItem {
+  id              String      @id @default(uuid())
+  orderId         String
+  order           RetailOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product     @relation(fields: [productId], references: [id])
+  quantity        Int
+  priceAtPurchase Float
+}
+
+model WholesaleOrder {
+  id                  String               @id @default(uuid())
+  orderNumber         String               @unique
+  wholesaleCustomerId String
+  wholesaleCustomer   WholesaleCustomer    @relation(fields: [wholesaleCustomerId], references: [id])
+  totalAmount         Float
+  status              String               @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  paymentStatus       String               @default("PENDING")
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  items               WholesaleOrderItem[]
+}
+
+model WholesaleOrderItem {
+  id                    String         @id @default(uuid())
+  wholesaleOrderId      String
+  wholesaleOrder        WholesaleOrder @relation(fields: [wholesaleOrderId], references: [id], onDelete: Cascade)
+  productId             String
+  product               Product        @relation(fields: [productId], references: [id])
+  quantity              Int
+  wholesalePriceApplied Float
+}
+
+model RentalBooking {
+  id                  String              @id @default(uuid())
+  bookingNumber       String              @unique
+  customerId          String
+  customer            User                @relation(fields: [customerId], references: [id])
+  startDate           DateTime
+  endDate             DateTime
+  totalFee            Float
+  securityDepositTotal Float
+  paymentStatus       String              @default("PENDING") // PENDING, PAID, REFUNDED
+  bookingStatus       String              @default("RESERVED") // AVAILABLE, RESERVED, BOOKED, PICKED_UP, RETURNED, LATE, CANCELLED
+  notes               String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  items               RentalBookingItem[]
+}
+
+model RentalBookingItem {
+  id              String        @id @default(uuid())
+  bookingId       String
+  booking         RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  rentalFee       Float
+  securityDeposit Float
+}
+
+model Appointment {
+  id                String   @id @default(uuid())
+  appointmentNumber String   @unique
+  name              String
+  phone             String
+  email             String
+  type              String   // BRIDAL_CONSULTATION, SHOWROOM_VISIT, WHOLESALE_MEETING, RENTAL_CONSULTATION
+  showroomLocation  String
+  preferredDate     DateTime
+  preferredTime     String
+  status            String   @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELLED
+  notes             String?
+  createdAt         DateTime @default(now())
+}
+
+model Enquiry {
+  id          String     @id @default(uuid())
+  name        String
+  phone       String
+  email       String
+  enquiryType String     // GENERAL, BRIDAL, RETAIL, WHOLESALE, RENTAL, APPOINTMENT
+  productId   String?
+  product     Product?   @relation(fields: [productId], references: [id])
+  message     String
+  status      String     @default("NEW") // NEW, CONTACTED, FOLLOW_UP, CONVERTED, CLOSED
+  createdAt   DateTime   @default(now())
+  followUps   FollowUp[]
+}
+
+model FollowUp {
+  id          String   @id @default(uuid())
+  enquiryId   String
+  enquiry     Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  note        String
+  followUpDate DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model Wishlist {
+  id        String         @id @default(uuid())
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestId   String?
+  createdAt DateTime       @default(now())
+  items     WishlistItem[]
+}
+
+model WishlistItem {
+  id         String   @id @default(uuid())
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([wishlistId, productId])
+}
+
+model GoldRate {
+  id            String   @id @default(uuid())
+  rate22k       Float
+  rate24k       Float
+  rateSilver    Float
+  unit          String   @default("per gram")
+  effectiveDate DateTime @default(now())
+  isCurrent     Boolean  @default(true)
+  updatedBy     String?
+}
+
+model Invoice {
+  id              String   @id @default(uuid())
+  invoiceNumber   String   @unique
+  orderId         String?
+  rentalBookingId String?
+  wholesaleOrderId String?
+  customerName    String
+  totalAmount     Float
+  taxAmount       Float    @default(0)
+  status          String   @default("PAID")
+  createdAt       DateTime @default(now())
+}
+
+model Quotation {
+  id            String   @id @default(uuid())
+  quoteNumber   String   @unique
+  customerName  String
+  phone         String
+  email         String
+  validUntil    DateTime
+  totalAmount   Float
+  status        String   @default("DRAFT") // DRAFT, SENT, ACCEPTED, REJECTED, EXPIRED
+  itemsJson     String
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+model Showroom {
+  id           String   @id @default(uuid())
+  name         String
+  city         String
+  address      String
+  phone        String
+  email        String
+  openingHours String
+  googleMapUrl String?
+  image        String?
+}
+
+model Review {
+  id           String   @id @default(uuid())
+  customerName String
+  location     String
+  rating       Int      @default(5)
+  reviewText   String
+  isApproved   Boolean  @default(true)
+  image        String?
+  createdAt    DateTime @default(now())
+}
+
+model AdminActivityLog {
+  id          String   @id @default(uuid())
+  adminUser   String
+  action      String   // PRODUCT_CREATED, PRODUCT_UPDATED, RENTAL_BOOKED, WHOLESALE_APPROVED, GOLD_RATE_UPDATED
+  entity      String
+  entityId    String
+  detailsJson String?
+  createdAt   DateTime @default(now())
+}
