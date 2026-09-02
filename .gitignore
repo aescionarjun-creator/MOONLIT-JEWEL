@@ -3,6 +3,9 @@
 /.pnp
 .pnp.js
 
+# firebase build artifacts
+/.firebase/
+
 # testing
 /coverage
 
